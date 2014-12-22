@@ -1,0 +1,66 @@
+#!/usr/bin/env python3
+
+import sys
+import libtreegen
+import argparse
+
+def parse_args(args):
+	par = argparse.ArgumentParser(
+		description='Generate tree code from a specification file.',
+		epilog='Written by Matthew Brush <mbrush@codebrainz.ca>'
+	)
+	par.add_argument('-d', '--debug', dest='debug', action='store_true', default=False,
+	                 help='enable debugging mode')
+	par.add_argument('--dump-ast', dest='dump_ast', action='store_true', default=False,
+	                 help='dump the abstract syntax tree of the spec file in an ' +
+	                      'XML-like format to the output file and exit')
+	par.add_argument('-o', '--output', metavar='FILE', dest='outputfile', default='-',
+	                 help='file to write output in or - for stdout (default)')
+	par.add_argument('-t', '--target', metavar='TARGET', dest='target', default=None,
+	                 help='name of code generation target (required)')
+	par.add_argument('-i', '--indent', metavar='INDENT', dest='indent', default='    ',
+	                 help='string to use for indentation of output code or AST dump')
+	par.add_argument('inputfile', metavar='SPEC', default='-',
+	                 help='input specification file or - for stdin (default)')
+	args = par.parse_args(args[1:])
+	return args
+
+def main(args):
+
+	args = parse_args(args)
+
+	if args.outputfile == '-':
+		output_file = sys.stdout
+		output_filename = "<stdout>"
+	else:
+		output_file = open(args.outputfile, 'w')
+		output_filename = args.outputfile
+
+	if args.inputfile == '-':
+		input_file = sys.stdin
+		input_filename = "<stdin>"
+	else:
+		input_file = open(args.inputfile, 'r')
+		input_filename = args.inputfile
+
+	spec = libtreegen.parse(input_file, input_filename, debug=args.debug)
+
+	if args.dump_ast:
+		spec.accept(libtreegen.DebugTree(out=output_file, indent=args.indent))
+		sys.exit(1)
+
+	if args.target is None:
+		if len(spec.targets) == 0:
+			sys.stderr.write("error: no code generation target specified and " +
+			                 "no target in spec file\n")
+			sys.exit(1)
+		target  = spec.targets[0].name
+	else:
+		target = args.target
+
+	libtreegen.codegen(spec, target, output_file, output_filename, args.indent)
+
+	return 0
+
+if __name__ == "__main__":
+	sys.exit(main(sys.argv))

@@ -1,0 +1,25 @@
+TreeGen README
+==============
+
+TreeGen is a program to generate code and data types to be used in a tree
+structure. One example, and the reason TreeGen was created, is to generate
+the C++ class nodes for an Abstract Syntax Tree, as used in a compiler front-end.
+
+Status
+------
+
+At the moment, TreeGen is under initial development and is not intended for
+mainstream use.
+
+libtreegen
+----------
+
+Most of TreeGen's code is factored as a library for re-use in other contexts.
+For the best example of using `libtreegen`, refer to the `treegen` script.
+
+treegen
+-------
+
+This is the main program for use from the command line. For information on
+using `treegen`, refer to help information displayed when run with the `-h`
+argument.

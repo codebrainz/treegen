@@ -1,0 +1,104 @@
+//
+// test.ast - Sample AST description for treegen
+//
+
+root Root;
+
+target CPlusPlus {
+
+  // In string literals,
+  //   $$ is target/variable (for externs)
+  //   $_ is "this" or "self", etc. (for nodes and externs)
+  //   $@ is the type (for nodes and externs)
+
+  header_only: true;
+  strong_ptr: "$@*";
+  weak_ptr: "$@*";
+  //allocator: "new $@";
+  //deleter: "delete($$)";
+  list_type: "std::vector<$@>";
+  use_line_directives: true;
+  use_accessors: false;
+  namespace: "Soda";
+  epilog: "data/header.txt";
+  prolog: "data/footer.txt";
+
+  extern Symtab {
+    type:      "Soda::SymbolTable*";
+    construct: "$$ = new Soda::SymbolTable($_);";
+    destruct:  "delete $$;";
+  }
+}
+
+visitor AstVisitor {
+  visit_method: "visit";
+  accept_method: "accept";
+  preorder: true;
+  inorder: true;
+  postorder: true;
+  visit_children: true;
+}
+
+abstract node AstNode {
+  int kind;
+  int location;
+  weak AstNode parent;
+  AstNode(parent, kind, location);
+}
+
+node Root : AstNode {
+  string filename = "";
+  Symtab scope = Symtab();
+  Root(filename);
+}
+
+abstract node Stmt : AstNode {}
+
+abstract node Expr : AstNode {
+  TypeRef type = null;
+}
+
+abstract node Symbol : AstNode {
+  string name;
+  weak Symbol parent_symbol;
+  weak Symtab owner;
+  Symbol(name, parent, owner);
+}
+
+abstract node TypeRef : AstNode {
+  weak Symbol type;
+}
+
+abstract node UnresolvedTypeRef : TypeRef {
+}
+
+abstract node DataType : TypeRef {
+}
+
+node BinExpr : Expr {
+  int op;
+  Expr left, right;
+  BinExpr(op, left, right);
+}
+
+node UnaryExpr : Expr {
+  int op;
+  Expr operand;
+  UnaryExpr(op, operand);
+}
+
+node CompoundStmt : Stmt {
+  Symtab scope;
+  list Stmt stmts;
+  Compound(stmts);
+}
+
+node ReturnStmt : Stmt {
+  Expr expr = null;
+  ReturnStmt(expr);
+}
+
+node GotoStmt : Stmt {
+  weak Symbol label;
+  Goto(label);
+}
