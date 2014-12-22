@@ -106,16 +106,13 @@ class CPlusPlusTarget(object):
 			self.add_fields(node)
 			self.add_constructors(node)
 			self.add_destructor(node)
-			for visitor in self.spec.visitors:
-				meth_type = ccode.DataType(name="void")
-				param_type = ccode.DataType(name=visitor.name + "&")
-				meth_param = ccode.Parameter(type=param_type, name="visitor")
-				meth = ccode.Method(
-						type=meth_type,
-						name="accept",
-						params=[meth_param])
-				meth.stmts.append(ccode.Stmt(code="visitor.visit(*this);"))
-				cls.methods.append(meth)
+			self.add_methods(node)
+			extra = self.target.get_option("class_extra", None)
+			if extra:
+				extra = extra.value
+				if extra.startswith('"') and extra.endswith('"'):
+					extra = extra[1:-1]
+				cls.extra_stmts.append(ccode.Stmt(code=extra))
 			self.pstack.pop()
 			self.top.stmts.append(ccode.BlankLine())
 
@@ -125,6 +122,40 @@ class CPlusPlusTarget(object):
 		out = ccodeio.CCodeIO(indent, cpp_indent)
 		self.tu.codegen(out)
 		return out.getvalue()
+
+	def add_getter(self, field):
+		meth = ccode.Method(type=self.datatype_from_field(field),
+		                    name='get_' + field.name,
+		                    params=[],
+		                    is_const=True)
+		meth.stmts.append(ccode.Stmt(code='return ' + field.name + ';'))
+		self.top.methods.append(meth)
+
+	def add_setter(self, field):
+		param = ccode.Parameter(type=self.datatype_from_field(field),
+		                        name='value')
+		meth = ccode.Method(type=ccode.DataType(name='void'),
+		                    name='set_' + field.name,
+		                    params=[param])
+		field_name = 'this->' + field.name if field.name == 'value' else field.name
+		if not field.type.is_weak and \
+				isinstance(field.type.type, (nodes.Node, nodes.ExternType)):
+			meth.stmts.append(ccode.Stmt(code='delete ' + field_name + ';'))
+		meth.stmts.append(ccode.Stmt(code=field_name + ' = value;'))
+		self.top.methods.append(meth)
+
+	def add_methods(self, node):
+		if self.target.get_option("use_accessors", False):
+			for field in node.fields:
+				self.add_getter(field)
+				self.add_setter(field)
+		for visitor in self.spec.visitors:
+			meth_type = ccode.DataType(name="void")
+			param_type = ccode.DataType(name=visitor.name + "&")
+			meth_param = ccode.Parameter(type=param_type, name="visitor")
+			meth = ccode.Method(type=meth_type, name="accept", params=[meth_param])
+			meth.stmts.append(ccode.Stmt(code="visitor.visit(*this);"))
+			self.top.methods.append(meth)
 
 	def datatype_from_field(self, field):
 		if isinstance(field.type.type, nodes.Node):
@@ -137,7 +168,8 @@ class CPlusPlusTarget(object):
 			list_type = list_type.value
 			if list_type.startswith('"') and list_type.endswith('"'):
 				list_type = list_type[1:-1]
-			list_type = list_type.replace('$@', el_type.name)
+			star = '*' if isinstance(el_type, nodes.Node) else ''
+			list_type = list_type.replace('$@', el_type.name + star)
 			return ccode.DataType(name=list_type)
 		elif isinstance(field.type.type, nodes.ExternType):
 			ext_type = self.externs[field.type.type.name]
@@ -167,9 +199,11 @@ class CPlusPlusTarget(object):
 	def list_ctor_fields(self, ctor, node, fields_list):
 		if node.base:
 			self.list_ctor_fields(ctor, node.base, fields_list)
-		for field in node.fields:
-			if field.name in ctor.args:
-				fields_list.append(field)
+		if len(node.ctrs) > 0: # FIXME
+			for arg in node.ctrs[0].args:
+				field = node.get_field(arg)
+				if field:
+					fields_list.append(field)
 
 	def add_construct_params(self, ctor, node):
 		fields = []
@@ -192,11 +226,19 @@ class CPlusPlusTarget(object):
 	def add_initializers(self, ctor, node):
 		if node.base:
 			init = ccode.ConstructorChainUp(target=node.base.name)
+			if len(node.base.ctrs) > 0:
+				fields = []
+				self.list_ctor_fields(None, node.base, fields)
+				for field in fields:
+					init_arg = ccode.InitializerArgument(name=field.name)
+					init.args.append(init_arg)
 			self.top.initializers.append(init)
-		for field in node.fields:
-			init_arg = ccode.InitializerArgument(name=field.name)
-			init = ccode.Initializer(target=field.name, arg=init_arg)
-			self.top.initializers.append(init)
+		if len(node.ctrs) > 0:
+			for ctr in node.ctrs:
+				for arg in ctr.args:
+					init_arg = ccode.InitializerArgument(name=arg)
+					init = ccode.Initializer(target=arg, arg=init_arg)
+					self.top.initializers.append(init)
 
 	def add_constructors(self, node):
 		if len(node.ctrs) == 0:
@@ -213,7 +255,8 @@ class CPlusPlusTarget(object):
 		for field in node.fields:
 			if not field.type.is_weak:
 				if isinstance(field.type.type, nodes.Node):
-						self.top.stmts.append(ccode.DeleteStmt(target=field.name))
+						#self.top.stmts.append(ccode.DeleteStmt(target=field.name))
+						self.top.stmts.append(ccode.Stmt(code='delete ' + field.name))
 				elif isinstance(field.type.type, nodes.ExternType):
 					dtor_stmt = self.extern_destructor(field.type.type.name)
 					dtor_stmt = dtor_stmt.replace('$$', field.name)

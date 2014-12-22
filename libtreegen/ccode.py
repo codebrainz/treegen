@@ -250,7 +250,8 @@ class Method(ClassMember):
 		("type", None),
 		("name", ""),
 		("params", []),
-		("stmts", []) ]
+		("stmts", []),
+		("is_const", False) ]
 	def codegen(self, out, current_access=None):
 		self.access.codegen(out, current_access)
 		out.write_indented('')
@@ -262,7 +263,10 @@ class Method(ClassMember):
 				param.codegen(out)
 				if param is not last:
 					out.write(', ')
-		out.write(') {')
+		if self.is_const:
+			out.write(') const {')
+		else:
+			out.write(') {')
 		if len(self.stmts) == 0:
 			out.write('}\n')
 		else:
@@ -402,7 +406,8 @@ class ClassDecl(CCodeNode):
 		("methods", []),
 		("constructors", []),
 		("destructor", None),
-		("is_struct", True)
+		("is_struct", True),
+		("extra_stmts", []),
 	]
 	def codegen(self, out):
 		if self.is_struct:
@@ -427,6 +432,8 @@ class ClassDecl(CCodeNode):
 			self.destructor.codegen(out)
 		for method in self.methods:
 			method.codegen(out)
+		for extra in self.extra_stmts:
+			extra.codegen(out)
 		out.unindent()
 		out.write_line('};')
 

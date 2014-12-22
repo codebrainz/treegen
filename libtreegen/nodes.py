@@ -108,6 +108,11 @@ class Node(BaseNode):
 		self.fields = [] if fields is None else fields
 		self.ctrs = [] if ctrs is None else ctrs
 		self.is_abstract = is_abstract
+	def get_field(self, name):
+		for field in self.fields:
+			if field.name == name:
+				return field
+		return None
 
 class SpecFile(BaseNode):
 	def __init__(self, targets=None, visitors=None, root=None, nodes=None):
