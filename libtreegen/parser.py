@@ -61,10 +61,10 @@ t_COLON     = '\:'
 t_COMMA     = '\,'
 t_EQUAL     = '\='
 t_LBRACE    = '\{'
-t_LBRACKET  = '\]'
+t_LBRACKET  = '\['
 t_LPAREN    = '\('
 t_RBRACE    = '\}'
-t_RBRACKET  = '\['
+t_RBRACKET  = '\]'
 t_RPAREN    = '\)'
 t_SEMICOLON = '\;'
 
@@ -168,15 +168,71 @@ def add_node(p, node):
 	#print("%s > %s" % (node.__class__.__name__, top.__class__.__name__))
 	return node
 
-def p_literal(p):
-	''' literal : BOOLEAN
-	            | INTEGER
-	            | FLOAT
-	            | CHRLIT
-	            | STRLIT
-	            | NULL
+def p_expr_list_first(p):
+	''' expr_list : expr
 	'''
-	p[0] = add_node(p, Literal(p[1]))
+	p[0] = [p[1]]
+	return p
+
+def p_expr_list_rest(p):
+	''' expr_list : expr_list COMMA expr
+	'''
+	p[1].append(p[3])
+	p[0] = p[1]
+	return p
+
+def p_list_literal(p):
+	''' list_literal : LBRACKET expr_list RBRACKET
+	'''
+	p[0] = ListLiteral(p[2])
+	return p
+
+def p_list_literal_empty(p):
+	''' list_literal : LBRACKET RBRACKET
+	'''
+	p[0] = ListLiteral([])
+	return p
+
+def p_literal_bool(p):
+	''' literal : BOOLEAN
+	'''
+	p[0] = add_node(p, BoolLiteral(p[1]))
+	return p
+
+def p_literal_int(p):
+	''' literal : INTEGER
+	'''
+	p[0] = add_node(p, IntLiteral(p[1]))
+	return p
+
+def p_literal_float(p):
+	''' literal : FLOAT
+	'''
+	p[0] = add_node(p, FloatLiteral(p[1]))
+	return p
+
+def p_literal_chr(p):
+	''' literal : CHRLIT
+	'''
+	p[0] = add_node(p, CharLiteral(p[1]))
+	return p
+
+def p_literal_str(p):
+	''' literal : STRLIT
+	'''
+	p[0] = add_node(p, StringLiteral(p[1]))
+	return p
+
+def p_literal_null(p):
+	''' literal : NULL
+	'''
+	p[0] = add_node(p, NullLiteral())
+	return p
+
+def p_literal_list(p):
+	''' literal : list_literal
+	'''
+	p[0] = p[1]
 	return p
 
 def p_expr(p):
@@ -189,13 +245,6 @@ def p_expr_call(p):
 	''' expr : IDENT LPAREN RPAREN
 	'''
 	p[0] = add_node(p, Call(p[1]))
-	return p
-
-# TODO: not working
-def p_expr_empty_list(p):
-	''' expr : LBRACKET RBRACKET
-	'''
-	p[0] = EmptyList()
 	return p
 
 def p_primitive_type(p):

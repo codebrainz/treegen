@@ -15,6 +15,38 @@ class Literal(BaseNode):
 	def __init__(self, value):
 		self.value = value
 
+class BoolLiteral(Literal):
+	def __init__(self, value):
+		super().__init__(value)
+
+class IntLiteral(Literal):
+	def __init__(self, value):
+		super().__init__(value)
+
+class FloatLiteral(Literal):
+	def __init__(self, value):
+		super().__init__(value)
+
+class CharLiteral(Literal):
+	def __init__(self, value):
+		if value.startswith("'") and value.endswith("'"):
+			value = value[1:-1]
+		super().__init__(value)
+
+class StringLiteral(Literal):
+	def __init__(self, value):
+		if value.startswith('"') and value.endswith('"'):
+			value = value[1:-1]
+		super().__init__(value)
+
+class NullLiteral(Literal):
+	def __init__(self, value=None):
+		super().__init__(value)
+
+class ListLiteral(Literal):
+	def __init__(self, list):
+		super().__init__(list)
+
 class Call(BaseNode):
 	def __init__(self, name):
 		self.name = name

@@ -16,13 +16,13 @@ target CPlusPlus {
   //deleter: "delete($$)";
   list_type: "std::vector<$@>";
   use_line_directives: true;
-  use_accessors: false;
+  use_accessors: true;
   namespace: "Tree";
   epilog: "data/header.txt";
   prolog: "data/footer.txt";
 
   // stuffed at end of class decl
-  class_extra: "void codegen(CodeIO& cio);";
+  class_extra: [ "void codegen(CCodeIO& cio);" ];
 
   extern D {
     type:      "D*";

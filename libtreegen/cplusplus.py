@@ -19,22 +19,48 @@ class CPlusPlusTarget(object):
 				raise ValueError("duplicate extern types '%s' in target '%s'" % (
 					extern.name, self.target.name))
 			self.externs[extern.name] = extern
+		self.validate_options()
+
+	opt_info = {
+		"allocator": (nodes.StringLiteral, "new $@"),
+		"class_extra": (nodes.ListLiteral, []),
+		"deleter": (nodes.StringLiteral, "delete $$"),
+		"epilog": (nodes.StringLiteral, ""),
+		"header_only": (nodes.BoolLiteral, True),
+		"list_type": (nodes.StringLiteral, "std::vector<$@>"),
+		"namespace": (nodes.StringLiteral, ""),
+		"prolog": (nodes.StringLiteral, ""),
+		"strong_ptr": (nodes.StringLiteral, "$@*"),
+		"use_accessors": (nodes.BoolLiteral, False),
+		"use_line_directives": (nodes.BoolLiteral, True),
+		"weak_ptr": (nodes.StringLiteral, "$@*"),
+	}
+
+	def validate_options(self):
+		opts = {}
+		# first load the defaults
+		for name, opt in self.opt_info.items():
+			opts[name] = opt[0](opt[1])
+		# then load and check the user-specified options
+		for opt in self.target.options:
+			if opt.name not in opts:
+				raise ValueError("unexpected option '%s' in CPlusPlus target" % opt.name)
+			opt_ty = self.opt_info[opt.name][0]
+			if not isinstance(opt.value, opt_ty):
+				raise TypeError("option '%s' in CPlusPlus target must " % opt.name +
+					            "be a '%s', not a '%s'" % (
+					             opt_ty.__name__, opt.value.__class__.__name__))
 
 	def extern_type(self, name):
 		extern = self.externs[name]
 		type = extern.get_option("type").value
-		if type.startswith('"') and type.endswith('"'):
-			type = type[1:-1]
 		return type
 
 	def extern_destructor(self, name):
 		extern = self.externs[name]
 		opt = extern.get_option("destruct")
 		if opt:
-			type = opt.value
-			if type.startswith('"') and type.endswith('"'):
-				type = type[1:-1]
-			return type
+			return opt.value
 		return ""
 
 	def primitive_type(self, name):
@@ -107,12 +133,7 @@ class CPlusPlusTarget(object):
 			self.add_constructors(node)
 			self.add_destructor(node)
 			self.add_methods(node)
-			extra = self.target.get_option("class_extra", None)
-			if extra:
-				extra = extra.value
-				if extra.startswith('"') and extra.endswith('"'):
-					extra = extra[1:-1]
-				cls.extra_stmts.append(ccode.Stmt(code=extra))
+			self.add_class_extra()
 			self.pstack.pop()
 			self.top.stmts.append(ccode.BlankLine())
 
@@ -122,6 +143,14 @@ class CPlusPlusTarget(object):
 		out = ccodeio.CCodeIO(indent, cpp_indent)
 		self.tu.codegen(out)
 		return out.getvalue()
+
+	def add_class_extra(self):
+		extra = self.target.get_option("class_extra", None)
+		if extra:
+			for ext in extra.value:
+				if not isinstance(ext, nodes.StringLiteral):
+					raise ValueError("expected a list of string literal for 'class_extra' option")
+				self.top.extra_stmts.append(ccode.Stmt(code=ext.value))
 
 	def add_getter(self, field):
 		meth = ccode.Method(type=self.datatype_from_field(field),
@@ -145,10 +174,15 @@ class CPlusPlusTarget(object):
 		self.top.methods.append(meth)
 
 	def add_methods(self, node):
-		if self.target.get_option("use_accessors", False):
-			for field in node.fields:
-				self.add_getter(field)
-				self.add_setter(field)
+		use_accessors = self.target.get_option("use_accessors", None)
+		if use_accessors:
+			if not isinstance(use_accessors, nodes.BoolLiteral):
+				raise ValueError("expected a boolean literal for 'use_accessors'")
+			if use_accessors.value:
+				if self.target.get_option("use_accessors", False):
+					for field in node.fields:
+						self.add_getter(field)
+						self.add_setter(field)
 		for visitor in self.spec.visitors:
 			meth_type = ccode.DataType(name="void")
 			param_type = ccode.DataType(name=visitor.name + "&")
@@ -166,8 +200,6 @@ class CPlusPlusTarget(object):
 			el_type = field.type.type.type
 			list_type = self.target.get_option('list_type', 'std::vector<$@>')
 			list_type = list_type.value
-			if list_type.startswith('"') and list_type.endswith('"'):
-				list_type = list_type[1:-1]
 			star = '*' if isinstance(el_type, nodes.Node) else ''
 			list_type = list_type.replace('$@', el_type.name + star)
 			return ccode.DataType(name=list_type)
@@ -176,12 +208,9 @@ class CPlusPlusTarget(object):
 			ext_type = ext_type.get_option('type')
 			if not ext_type:
 				raise ValueError("extern in target doesn't specify a type: option")
-			ext_type = ext_type.value
-			if ext_type.startswith('"') and ext_type.endswith('"'):
-				ext_type = ext_type[1:-1]
-			else:
+			if not isinstance(ext_type, nodes.StringLiteral):
 				raise ValueError("expected string literal")
-			return ccode.DataType(name=ext_type)
+			return ccode.DataType(name=ext_type.value)
 
 	def add_fields(self, node):
 		for field in node.fields:
