@@ -394,6 +394,7 @@ def p_field_type(p):
 		push_parent(p, let)
 		let.type = add_node(p, p[2])
 		pop_parent(p)
+		p[0].type = let
 	else:
 		p[0].type = add_node(p, p[2])
 	pop_parent(p)
@@ -647,12 +648,24 @@ def resolve_root_spec(spec, types):
 			sys.stderr.write("error: unresolved root node type '%s'\n" % spec.root.type.name)
 			sys.exit(1)
 
+def resolve_list_types(spec, types):
+	for node in spec.nodes:
+		for field in node.fields:
+			if isinstance(field.type.type, ListElementType):
+				if isinstance(field.type.type.type, UnresolvedType):
+					if field.type.type.type.name in types:
+						field.type.type.type = types[field.type.type.type.name]
+				else:
+					sys.stderr.write("error: unresolved list node type '%s'\n" % field.type.type.name)
+					sys.exit(1)
+
 def resolve_types(spec):
 	types = {}
 	find_extern_types(spec, types)
 	find_node_types(spec, types)
 	resolve_node_types(spec, types)
 	resolve_root_spec(spec, types)
+	resolve_list_types(spec, types)
 	return types
 
 def check_include(fn_string, search_paths):

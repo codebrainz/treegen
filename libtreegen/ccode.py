@@ -266,6 +266,7 @@ class Method(ClassMember):
 		if len(self.stmts) == 0:
 			out.write('}\n')
 		else:
+			out.write('\n')
 			out.indent()
 			for stmt in self.stmts:
 				stmt.codegen(out)
@@ -420,12 +421,12 @@ class ClassDecl(CCodeNode):
 		out.indent()
 		for field in self.fields:
 			field.codegen(out)
-		for method in self.methods:
-			method.codegen(out)
 		for ctor in self.constructors:
 			ctor.codegen(out)
 		if self.destructor:
 			self.destructor.codegen(out)
+		for method in self.methods:
+			method.codegen(out)
 		out.unindent()
 		out.write_line('};')
 

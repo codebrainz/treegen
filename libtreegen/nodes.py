@@ -54,32 +54,32 @@ class ExternTypeDef(BaseNode):
 	def __init__(self, name, options=None):
 		self.name = name
 		self.options = [] if options is None else options
-	def get_option(self, name):
+	def get_option(self, name, default=None):
 		for opt in self.options:
 			if opt.name == name:
 				return opt.value
-		return None
+		return default
 
 class Target(BaseNode):
 	def __init__(self, name, options=None, externs=None):
 		self.name = name
 		self.options = [] if options is None else options
 		self.externs = [] if externs is None else externs
-	def get_option(self, name):
+	def get_option(self, name, default=None):
 		for opt in self.options:
 			if opt.name == name:
 				return opt.value
-		return None
+		return default
 
 class Visitor(BaseNode):
 	def __init__(self, name, options=None):
 		self.name = name
 		self.options = [] if options is None else options
-	def get_option(self, name):
+	def get_option(self, name, default=None):
 		for opt in self.options:
 			if opt.name == name:
 				return opt.value
-		return None
+		return default
 
 class RootSpec(BaseNode):
 	def __init__(self, type):

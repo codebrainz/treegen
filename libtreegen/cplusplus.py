@@ -89,7 +89,7 @@ class CPlusPlusTarget(object):
 				param_type = ccode.DataType(name=node.name + "&")
 				meth_param = ccode.Parameter(type=param_type, name="node")
 				meth = ccode.Method(
-						type=ccode.DataType(name="void"),
+						type=meth_type,
 						name="visit",
 						params=[meth_param])
 				cls.methods.append(meth)
@@ -106,6 +106,16 @@ class CPlusPlusTarget(object):
 			self.add_fields(node)
 			self.add_constructors(node)
 			self.add_destructor(node)
+			for visitor in self.spec.visitors:
+				meth_type = ccode.DataType(name="void")
+				param_type = ccode.DataType(name=visitor.name + "&")
+				meth_param = ccode.Parameter(type=param_type, name="visitor")
+				meth = ccode.Method(
+						type=meth_type,
+						name="accept",
+						params=[meth_param])
+				meth.stmts.append(ccode.Stmt(code="visitor.visit(*this);"))
+				cls.methods.append(meth)
 			self.pstack.pop()
 			self.top.stmts.append(ccode.BlankLine())
 
@@ -116,18 +126,37 @@ class CPlusPlusTarget(object):
 		self.tu.codegen(out)
 		return out.getvalue()
 
+	def datatype_from_field(self, field):
+		if isinstance(field.type.type, nodes.Node):
+			return ccode.DataType(name=field.type.type.name + '*')
+		elif isinstance(field.type.type, nodes.PrimitiveType):
+			return ccode.DataType(name=self.primitive_type(field.type.type.name))
+		elif isinstance(field.type.type, nodes.ListElementType):
+			el_type = field.type.type.type
+			list_type = self.target.get_option('list_type', 'std::vector<$@>')
+			list_type = list_type.value
+			if list_type.startswith('"') and list_type.endswith('"'):
+				list_type = list_type[1:-1]
+			list_type = list_type.replace('$@', el_type.name)
+			return ccode.DataType(name=list_type)
+		elif isinstance(field.type.type, nodes.ExternType):
+			ext_type = self.externs[field.type.type.name]
+			ext_type = ext_type.get_option('type')
+			if not ext_type:
+				raise ValueError("extern in target doesn't specify a type: option")
+			ext_type = ext_type.value
+			if ext_type.startswith('"') and ext_type.endswith('"'):
+				ext_type = ext_type[1:-1]
+			else:
+				raise ValueError("expected string literal")
+			return ccode.DataType(name=ext_type)
+
 	def add_fields(self, node):
 		for field in node.fields:
-			if isinstance(field.type.type, nodes.Node):
-				f_type = ccode.DataType(name=field.type.type.name + '*')
-			elif isinstance(field.type.type, nodes.PrimitiveType):
-				f_type = ccode.DataType(name=self.primitive_type(field.type.type.name))
-			elif isinstance(field.type.type, nodes.ExternType):
-				f_type = ccode.DataType(name=self.extern_type(field.type.type.name))
-			else:
+			dt = self.datatype_from_field(field)
+			if dt is None:
 				raise ValueError("unknown field type '%s'" % field.type.type.name)
-			fld = ccode.Field(type=f_type, name=field.name)
-			self.top.fields.append(fld)
+			self.top.fields.append(ccode.Field(type=dt, name=field.name))
 
 	def find_field(self, node, name):
 		for field in node.fields:
@@ -146,15 +175,10 @@ class CPlusPlusTarget(object):
 		fields = []
 		self.list_ctor_fields(ctor, node, fields)
 		for field in fields:
-			if isinstance(field.type.type, nodes.Node):
-				f_type = ccode.DataType(name=field.type.type.name + '*')
-			elif isinstance(field.type.type, nodes.PrimitiveType):
-				f_type = ccode.DataType(name=self.primitive_type(field.type.type.name))
-			elif isinstance(field.type.type, nodes.ExternType):
-				f_type = ccode.DataType(name=self.extern_type(field.type.type.name))
-			else:
+			dt = self.datatype_from_field(field)
+			if dt is None:
 				raise ValueError("unknown field type '%s'" % field.type.type.name)
-			self.top.params.append(ccode.Parameter(type=f_type, name=field.name))
+			self.top.params.append(ccode.Parameter(type=dt, name=field.name))
 
 	def make_initializer(self, ctor, node):
 		fields = []
@@ -194,6 +218,10 @@ class CPlusPlusTarget(object):
 					dtor_stmt = self.extern_destructor(field.type.type.name)
 					dtor_stmt = dtor_stmt.replace('$$', field.name)
 					self.top.stmts.append(ccode.Stmt(code=dtor_stmt))
+				elif isinstance(field.type.type, nodes.ListElementType):
+					dtor_stmt = ccode.Stmt(code='for (auto i : ' + field.name +
+						') { delete i; }')
+					self.top.stmts.append(dtor_stmt)
 
 	def add_destructor(self, node):
 		dtor = ccode.Destructor(name=self.top.name, is_virtual=True)
