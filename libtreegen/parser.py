@@ -612,9 +612,8 @@ def parse(file, filename, debug=True):
     parser = yacc.yacc(debug=True) if debug \
                 else yacc.yacc(debug=False, errorlog=yacc.NullLogger())
     parents = []
-    spec = SpecFile()
+    spec = SpecFile(filename)
     spec.parent = None
-    spec.filename = filename
     parents.append(spec)
     setattr(parser, "parents", parents)
     spec = parser.parse(lexer=lexer, tracking=True)

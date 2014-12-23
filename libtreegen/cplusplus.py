@@ -1,69 +1,65 @@
 from . import ccode
 from . import ccodeio
 from . import nodes
+from . import report
+from . import target
+from .target import OptionInfo as OptInf
 
-class CPlusPlusTarget(object):
+class CPlusPlusTarget(target.CodegenTarget):
+    # Name of the target as in the spec file
+    name = "CPlusPlus"
+
+    # Options allowed in target X { ... } blocks
+    options = {
+        "allocator":           OptInf(nodes.StringLiteral, "new $@"),
+        "class_extra":         OptInf(nodes.ListLiteral, []),
+        "cpp_indent":          OptInf(nodes.StringLiteral, " "),
+        "deleter":             OptInf(nodes.StringLiteral, "delete $$"),
+        "epilog":              OptInf(nodes.StringLiteral, ""),
+        "header_only":         OptInf(nodes.BoolLiteral, True),
+        "indent":              OptInf(nodes.StringLiteral, "    "),
+        "list_type":           OptInf(nodes.StringLiteral, "std::vector<$@>"),
+        "namespace":           OptInf(nodes.StringLiteral, ""),
+        "prolog":              OptInf(nodes.StringLiteral, ""),
+        "strong_ptr":          OptInf(nodes.StringLiteral, "$@*"),
+        "use_accessors":       OptInf(nodes.BoolLiteral, False),
+        "use_line_directives": OptInf(nodes.BoolLiteral, True),
+        "weak_ptr":            OptInf(nodes.StringLiteral, "$@*"),
+    }
+
+    # Options allowed in extern X { ... } blocks
+    external_options = {
+        "construct": OptInf(nodes.StringLiteral, ""),
+        "destruct":  OptInf(nodes.StringLiteral, ""),
+        "type":      OptInf(nodes.StringLiteral, "", True),
+    }
 
     def __init__(self, spec):
         self.spec = spec
         self.pstack = []
+
+        # TODO: move to super class, pass spec file up to super constructor
+        have_target = False
         for target in spec.targets:
-            if target.name == "CPlusPlus":
+            if target.name == self.name:
+                if have_target:
+                    report.error("spec file '%s' contains multiple " % spec.filename +
+                                 "'%s' targets, only one is allowed" % self.name)
                 self.target = target
-                break
-        else:
-            raise ValueError("spec contains no 'CPlusPlus' target")
-        self.externs = {}
-        for extern in self.target.externs:
-            if extern in self.externs:
-                raise ValueError("duplicate extern types '%s' in target '%s'" % (
-                    extern.name, self.target.name))
-            self.externs[extern.name] = extern
-        self.validate_options()
+                have_target = True
 
-    opt_info = {
-        "allocator": (nodes.StringLiteral, "new $@"),
-        "class_extra": (nodes.ListLiteral, []),
-        "cpp_indent": (nodes.StringLiteral, " "),
-        "deleter": (nodes.StringLiteral, "delete $$"),
-        "epilog": (nodes.StringLiteral, ""),
-        "header_only": (nodes.BoolLiteral, True),
-        "indent": (nodes.StringLiteral, "    "),
-        "list_type": (nodes.StringLiteral, "std::vector<$@>"),
-        "namespace": (nodes.StringLiteral, ""),
-        "prolog": (nodes.StringLiteral, ""),
-        "strong_ptr": (nodes.StringLiteral, "$@*"),
-        "use_accessors": (nodes.BoolLiteral, False),
-        "use_line_directives": (nodes.BoolLiteral, True),
-        "weak_ptr": (nodes.StringLiteral, "$@*"),
-    }
+        if not have_target:
+            report.warning("spec file '%s' contains no " % spec.filename +
+                           "'%s' target, attempting to use default options " % self.name +
+                           "(some options may be required)")
 
-    def validate_options(self):
-        opts = {}
-        # first load the defaults
-        for name, opt in self.opt_info.items():
-            opts[name] = opt[0](opt[1])
-        # then load and check the user-specified options
-        for opt in self.target.options:
-            if opt.name not in opts:
-                raise ValueError("unexpected option '%s' in CPlusPlus target" % opt.name)
-            opt_ty = self.opt_info[opt.name][0]
-            if not isinstance(opt.value, opt_ty):
-                raise TypeError("option '%s' in CPlusPlus target must " % opt.name +
-                                "be a '%s', not a '%s'" % (
-                                 opt_ty.__name__, opt.value.__class__.__name__))
+        super().__init__(self.target.options, self.target.externs)
 
     def extern_type(self, name):
-        extern = self.externs[name]
-        type = extern.get_option("type").value
-        return type
+        return self.get_ext_opt(name, "type")
 
     def extern_destructor(self, name):
-        extern = self.externs[name]
-        opt = extern.get_option("destruct")
-        if opt:
-            return opt.value
-        return ""
+        return self.get_ext_opt(name, "destruct", "")
 
     def primitive_type(self, name):
         d = {
@@ -92,7 +88,7 @@ class CPlusPlusTarget(object):
             ccode.CppInclude(first="<vector>")
         ])
 
-        ns_name = self.target.get_option("namespace")
+        ns_name = self.get_opt("namespace")
         if ns_name:
             ns_name = ns_name.value.strip('"')
             ns = ccode.Namespace(name=ns_name)
@@ -147,7 +143,7 @@ class CPlusPlusTarget(object):
         return out.getvalue()
 
     def add_class_extra(self):
-        extra = self.target.get_option("class_extra", None)
+        extra = self.get_opt("class_extra", None)
         if extra:
             for ext in extra.value:
                 if not isinstance(ext, nodes.StringLiteral):
@@ -176,12 +172,12 @@ class CPlusPlusTarget(object):
         self.top.methods.append(meth)
 
     def add_methods(self, node):
-        use_accessors = self.target.get_option("use_accessors", None)
+        use_accessors = self.get_opt("use_accessors", None)
         if use_accessors:
             if not isinstance(use_accessors, nodes.BoolLiteral):
                 raise ValueError("expected a boolean literal for 'use_accessors'")
             if use_accessors.value:
-                if self.target.get_option("use_accessors", False):
+                if self.get_opt("use_accessors", False):
                     for field in node.fields:
                         self.add_getter(field)
                         self.add_setter(field)
@@ -200,14 +196,13 @@ class CPlusPlusTarget(object):
             return ccode.DataType(name=self.primitive_type(field.type.type.name))
         elif isinstance(field.type.type, nodes.ListElementType):
             el_type = field.type.type.type
-            list_type = self.target.get_option('list_type', 'std::vector<$@>')
+            list_type = self.get_opt('list_type', 'std::vector<$@>')
             list_type = list_type.value
             star = '*' if isinstance(el_type, nodes.Node) else ''
             list_type = list_type.replace('$@', el_type.name + star)
             return ccode.DataType(name=list_type)
         elif isinstance(field.type.type, nodes.ExternType):
-            ext_type = self.externs[field.type.type.name]
-            ext_type = ext_type.get_option('type')
+            ext_type = self.extern_type(field.type.type.name)
             if not ext_type:
                 raise ValueError("extern in target doesn't specify a type: option")
             if not isinstance(ext_type, nodes.StringLiteral):
@@ -290,7 +285,7 @@ class CPlusPlusTarget(object):
                         self.top.stmts.append(ccode.Stmt(code='delete ' + field.name))
                 elif isinstance(field.type.type, nodes.ExternType):
                     dtor_stmt = self.extern_destructor(field.type.type.name)
-                    dtor_stmt = dtor_stmt.replace('$$', field.name)
+                    dtor_stmt = dtor_stmt.value.replace('$$', field.name)
                     self.top.stmts.append(ccode.Stmt(code=dtor_stmt))
                 elif isinstance(field.type.type, nodes.ListElementType):
                     dtor_stmt = ccode.Stmt(code='for (auto i : ' + field.name +

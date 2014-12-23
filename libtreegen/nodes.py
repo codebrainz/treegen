@@ -166,14 +166,14 @@ class Node(BaseNode):
         return None
 
 class SpecFile(BaseNode):
-    def __init__(self, targets=None, visitors=None, root=None, nodes=None):
+    def __init__(self, filename=None, targets=None, visitors=None, root=None, nodes=None):
         super().__init__()
         self.targets = [] if targets is None else targets
         self.visitors = [] if visitors is None else visitors
         self.root = root
         self.nodes = [] if nodes is None else nodes
         self.types = {}
-        self.filename = None
+        self.filename = filename
 
 class NodeVisitor(object):
     def generic_visit(self, node):
