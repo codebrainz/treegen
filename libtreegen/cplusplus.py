@@ -145,7 +145,7 @@ class CPlusPlusTarget(target.CodegenTarget):
                 meth_type = ccode.DataType(name="void")
                 param_type = ccode.DataType(name=node.name + "&")
                 meth_param = ccode.Parameter(type=param_type, name="node")
-                meth = ccode.Method(
+                meth = ccode.InlineMethod(
                         type=meth_type,
                         name="visit",
                         params=[meth_param])
@@ -164,13 +164,21 @@ class CPlusPlusTarget(target.CodegenTarget):
             self.top.fields.append(self.reset_line_dir())
             self.add_fields(node)
             self.add_constructors(node)
-            self.add_destructor(node)
-            self.add_methods(node)
+            self.add_destructor_decl(node)
+            self.add_method_decls(node)
             self.add_class_extra()
             self.pstack.pop()
             self.top.stmts.append(ccode.BlankLine())
 
-        self.pstack.pop()
+        # create all the destructor definitions and accessors after the classes are fully defined
+        for node in self.spec.nodes:
+            self.add_method_defs(node)
+            self.add_destructor_def(node)
+
+        ns_name = self.get_opt("namespace")
+        if ns_name:
+            # pop the namespace off
+            self.pstack.pop()
 
         # codegen everything to CCodeIO object
         out = ccodeio.CCodeIO(out_filename, indent, cpp_indent)
@@ -187,28 +195,28 @@ class CPlusPlusTarget(target.CodegenTarget):
                 self.top.extra_stmts.append(ccode.Stmt(code=ext.value))
             self.top.extra_stmts.append(self.reset_line_dir())
 
-    def add_getter(self, field):
-        meth = ccode.Method(type=self.datatype_from_field(field),
-                            name='get_' + field.name,
-                            params=[],
-                            is_const=True)
-        meth.stmts.append(ccode.Stmt(code='return ' + field.name + ';'))
+    def add_getter_decl(self, field):
+        meth = ccode.MethodDecl(type=self.datatype_from_field(field),
+                                name='get_' + field.name,
+                                params=[],
+                                is_const=True)
+        #meth.stmts.append(ccode.Stmt(code='return ' + field.name + ';'))
         self.top.methods.append(meth)
 
-    def add_setter(self, field):
+    def add_setter_decl(self, field):
         param = ccode.Parameter(type=self.datatype_from_field(field),
                                 name='value')
-        meth = ccode.Method(type=ccode.DataType(name='void'),
-                            name='set_' + field.name,
-                            params=[param])
-        field_name = 'this->' + field.name if field.name == 'value' else field.name
-        if not field.type.is_weak and \
-                isinstance(field.type.type, (nodes.Node, nodes.ExternType)):
-            meth.stmts.append(ccode.Stmt(code='delete ' + field_name + ';'))
-        meth.stmts.append(ccode.Stmt(code=field_name + ' = value;'))
+        meth = ccode.MethodDecl(type=ccode.DataType(name='void'),
+                                name='set_' + field.name,
+                                params=[param])
+        #field_name = 'this->' + field.name if field.name == 'value' else field.name
+        #if not field.type.is_weak and \
+        #        isinstance(field.type.type, (nodes.Node, nodes.ExternType)):
+        #    meth.stmts.append(ccode.Stmt(code='delete ' + field_name + ';'))
+        #meth.stmts.append(ccode.Stmt(code=field_name + ' = value;'))
         self.top.methods.append(meth)
 
-    def add_methods(self, node):
+    def add_method_decls(self, node):
         use_accessors = self.get_opt("use_accessors", None)
         if use_accessors:
             if not isinstance(use_accessors, nodes.BoolLiteral):
@@ -216,15 +224,49 @@ class CPlusPlusTarget(target.CodegenTarget):
             if use_accessors.value:
                 if self.get_opt("use_accessors", False):
                     for field in node.fields:
-                        self.add_getter(field)
-                        self.add_setter(field)
+                        self.add_getter_decl(field)
+                        self.add_setter_decl(field)
         for visitor in self.spec.visitors:
             meth_type = ccode.DataType(name="void")
             param_type = ccode.DataType(name=visitor.name + "&")
             meth_param = ccode.Parameter(type=param_type, name="visitor")
-            meth = ccode.Method(type=meth_type, name="accept", params=[meth_param])
+            meth = ccode.InlineMethod(type=meth_type, name="accept", params=[meth_param])
             meth.stmts.append(ccode.Stmt(code="visitor.visit(*this);"))
             self.top.methods.append(meth)
+
+    def add_getter_def(self, cls, field):
+        meth = ccode.Method(type=self.datatype_from_field(field),
+                            name='get_' + field.name,
+                            params=[],
+                            is_const=True,
+                            cls=cls)
+        meth.stmts.append(ccode.Stmt(code='return ' + field.name + ';'))
+        self.top.stmts.append(meth)
+
+    def add_setter_def(self, cls, field):
+        param = ccode.Parameter(type=self.datatype_from_field(field),
+                                name='value')
+        meth = ccode.Method(type=ccode.DataType(name='void'),
+                            name='set_' + field.name,
+                            params=[param],
+                            cls=cls)
+        field_name = 'this->' + field.name if field.name == 'value' else field.name
+        if not field.type.is_weak and \
+                isinstance(field.type.type, (nodes.Node, nodes.ExternType)):
+            meth.stmts.append(ccode.Stmt(code='delete ' + field_name + ';'))
+        meth.stmts.append(ccode.Stmt(code=field_name + ' = value;'))
+        self.top.stmts.append(meth)
+
+    def add_method_defs(self, node):
+        use_accessors = self.get_opt("use_accessors", None)
+        if use_accessors:
+            if not isinstance(use_accessors, nodes.BoolLiteral):
+                raise ValueError("expected a boolean literal for 'use_accessors'")
+            if use_accessors.value:
+                if self.get_opt("use_accessors", False):
+                    for field in node.fields:
+                        self.add_getter_def(node.name, field)
+                        self.add_setter_def(node.name, field)
 
     def datatype_from_field(self, field):
         if isinstance(field.type.type, nodes.Node):
@@ -318,6 +360,18 @@ class CPlusPlusTarget(target.CodegenTarget):
             self.add_initializers(ctr, node)
             self.pstack.pop()
 
+    def add_destructor_decl(self, node):
+        dtor = ccode.DestructorDecl(name=self.top.name, is_virtual=True)
+        self.top.destructor = dtor
+
+    def add_destructor_def(self, node):
+        dtor = ccode.Destructor(name=node.name, is_inline=True)
+        self.top.stmts.append(dtor)
+        self.pstack.append(dtor)
+        self.delete_stmts(node)
+        self.pstack.pop()
+        self.top.stmts.append(ccode.BlankLine())
+
     def delete_stmts(self, node):
         for field in node.fields:
             if not field.type.is_weak:
@@ -332,10 +386,3 @@ class CPlusPlusTarget(target.CodegenTarget):
                     dtor_stmt = ccode.Stmt(code='for (auto i : ' + field.name +
                         ') { delete i; }')
                     self.top.stmts.append(dtor_stmt)
-
-    def add_destructor(self, node):
-        dtor = ccode.Destructor(name=self.top.name, is_virtual=True)
-        self.top.destructor = dtor
-        self.pstack.append(dtor)
-        self.delete_stmts(node)
-        self.pstack.pop()

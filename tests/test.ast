@@ -26,11 +26,11 @@ target CPlusPlus {
   // stuffed at end of class decl
   class_extra: [ "void codegen(std::ostream& cio);" ];
 
-  extern D {
-    type:      "D*";
-    construct: "$$ = new D($_);";
-    destruct:  "delete $$;";
-  }
+  //extern D {
+  //  type:      "D*";
+  //  construct: "$$ = new D($_);";
+  //  destruct:  "delete $$;";
+  //}
 }
 
 visitor AstVisitor {
@@ -54,6 +54,6 @@ node B : A {
 }
 
 node C : B {
-	D f4;
+	float f4;
 	C(f4);
 }

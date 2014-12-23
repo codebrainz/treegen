@@ -111,7 +111,7 @@ class CppLine(CppMacro):
 class CppLineReset(CppMacro):
     def codegen(self, out):
         loc = out.reset_location
-        CppLine(first='%d' % out.reset_location.line,
+        CppLine(first='%d' % (out.reset_location.line + 1),
                 second='"%s"' % out.reset_location.file
         ).codegen(out)
 
@@ -256,13 +256,70 @@ class Field(ClassMember):
             self.initializer.codegen(out)
         out.write(';\n')
 
+class MethodDecl(ClassMember):
+    _fields = [
+        ("type", None),
+        ("name", ""),
+        ("params", []),
+        ("is_const", False),
+    ]
+    def codegen(self, out, current_access=None):
+        self.access.codegen(out, current_access)
+        out.write_indented('')
+        self.type.codegen(out)
+        out.write(' ' + self.name + '(')
+        if self.params:
+            last = self.params[-1]
+            for param in self.params:
+                param.codegen(out)
+                if param is not last:
+                    out.write(', ')
+        if self.is_const:
+            out.write(') const;\n')
+        else:
+            out.write(');\n')
+
 class Method(ClassMember):
     _fields = [
         ("type", None),
         ("name", ""),
         ("params", []),
         ("stmts", []),
-        ("is_const", False) ]
+        ("is_const", False),
+        ("cls", None) ]
+    def codegen(self, out, current_access=None):
+        self.access.codegen(out, current_access)
+        out.write_indented('')
+        self.type.codegen(out)
+        out.write(' ' + self.cls + '::' + self.name + '(')
+        if self.params:
+            last = self.params[-1]
+            for param in self.params:
+                param.codegen(out)
+                if param is not last:
+                    out.write(', ')
+        if self.is_const:
+            out.write(') const {')
+        else:
+            out.write(') {')
+        if len(self.stmts) == 0:
+            out.write('}\n')
+        else:
+            out.write('\n')
+            out.indent()
+            for stmt in self.stmts:
+                stmt.codegen(out)
+            out.unindent()
+            out.write_line('}')
+
+class InlineMethod(ClassMember):
+    _fields = [
+        ("type", None),
+        ("name", ""),
+        ("params", []),
+        ("stmts", []),
+        ("is_const", False)
+    ]
     def codegen(self, out, current_access=None):
         self.access.codegen(out, current_access)
         out.write_indented('')
@@ -332,13 +389,19 @@ class Constructor(ClassMember):
         out.unindent()
 
 class Destructor(ClassMember):
-    _fields = [ ("name", ""), ("stmts", []), ("is_virtual", False) ]
+    _fields = [
+        ("name", ""),
+        ("stmts", []),
+        ("is_virtual", False),
+        ("is_inline", False) ]
     def codegen(self, out, current_access=None):
         self.access.codegen(out, current_access)
         out.write_indented('')
         if self.is_virtual:
             out.write('virtual ')
-        out.write('~' + self.name + '() {')
+        if self.is_inline:
+            out.write('inline ')
+        out.write(self.name +'::~' + self.name + '() {')
         if len(self.stmts) > 0:
             out.write('\n')
             out.indent()
@@ -348,6 +411,15 @@ class Destructor(ClassMember):
             out.write_line('}')
         else:
             out.write('}\n')
+
+class DestructorDecl(ClassMember):
+    _fields = [ ("name", ""), ("is_virtual", False) ]
+    def codegen(self, out, current_access=None):
+        self.access.codegen(out, current_access)
+        out.write_indented('')
+        if self.is_virtual:
+            out.write('virtual ')
+        out.write('~' + self.name + '();\n')
 
 class DeleteStmt(CCodeNode):
     _fields = [ ("target", ""), ("is_array", False) ]
