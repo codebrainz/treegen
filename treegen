@@ -33,7 +33,7 @@ def main(args):
 		output_file = sys.stdout
 		output_filename = "<stdout>"
 	else:
-		output_file = open(args.outputfile, 'w')
+		output_file = open(args.outputfile, 'a+') # prevent truncating
 		output_filename = args.outputfile
 
 	if args.inputfile == '-':
