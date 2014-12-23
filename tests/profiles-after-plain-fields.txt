@@ -1,0 +1,9 @@
+$ time tests/profiles.sh
+Running all test profiles...
+status: wrote 1000 independent node classes
+status: wrote 958 nested node subclasses
+Have a look at the `tests/profileok.txt' and `tests/profilebig.txt' files
+
+real	0m19.678s
+user	0m19.187s
+sys	0m0.448s
