@@ -21,6 +21,8 @@ target CPlusPlus {
   epilog: "data/header.txt";
   prolog: "data/footer.txt";
 
+  includes: [ "<vector>" ];
+
   // stuffed at end of class decl
   class_extra: [ "void codegen(CCodeIO& cio);" ];
 

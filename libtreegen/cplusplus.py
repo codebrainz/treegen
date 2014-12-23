@@ -17,6 +17,7 @@ class CPlusPlusTarget(target.CodegenTarget):
         "deleter":             OptInf(nodes.StringLiteral, "delete $$"),
         "epilog":              OptInf(nodes.StringLiteral, ""),
         "header_only":         OptInf(nodes.BoolLiteral, True),
+        "includes":            OptInf(nodes.ListLiteral, []),
         "indent":              OptInf(nodes.StringLiteral, "    "),
         "list_type":           OptInf(nodes.StringLiteral, "std::vector<$@>"),
         "namespace":           OptInf(nodes.StringLiteral, ""),
@@ -83,10 +84,21 @@ class CPlusPlusTarget(target.CodegenTarget):
         self.tu = ccode.TranslationUnit(filename=out_filename, is_header=True)
         self.pstack.append(self.tu)
 
-        self.tu.includes.extend([
-            ccode.CppInclude(first="<string>"),
-            ccode.CppInclude(first="<vector>")
-        ])
+        # include required by primitive string type
+        self.tu.includes.append(ccode.CppInclude(first="<string>"))
+
+        includes = self.get_opt("includes", None)
+        if includes:
+            for inc in includes.value:
+                if not isinstance(inc, nodes.StringLiteral):
+                    report.error("invalid data type '%s' in " % inc.__class__.__name__ +
+                                 "'includes' option for codegen target '%s'" % self.name)
+                inc = inc.value
+                # Add double quotes if not <> include and has no enclosing quotes
+                if (not inc.startswith('<') and not inc.endswith('>')) and \
+                   (not inc.startswith('"') and not inc.endswith('"')):
+                    inc = '"' + inc + '"'
+                self.tu.includes.append(ccode.CppInclude(first=inc))
 
         ns_name = self.get_opt("namespace")
         if ns_name:
