@@ -11,28 +11,28 @@ class CPlusPlusTarget(target.CodegenTarget):
 
     # Options allowed in target X { ... } blocks
     options = {
-        "allocator":           OptInf(nodes.StringLiteral, "new $@"),
-        "class_extra":         OptInf(nodes.ListLiteral, []),
-        "cpp_indent":          OptInf(nodes.StringLiteral, " "),
-        "deleter":             OptInf(nodes.StringLiteral, "delete $$"),
-        "epilog":              OptInf(nodes.StringLiteral, ""),
-        "header_only":         OptInf(nodes.BoolLiteral, True),
-        "includes":            OptInf(nodes.ListLiteral, []),
-        "indent":              OptInf(nodes.StringLiteral, "    "),
-        "list_type":           OptInf(nodes.StringLiteral, "std::vector<$@>"),
-        "namespace":           OptInf(nodes.StringLiteral, ""),
-        "prolog":              OptInf(nodes.StringLiteral, ""),
-        "strong_ptr":          OptInf(nodes.StringLiteral, "$@*"),
-        "use_accessors":       OptInf(nodes.BoolLiteral, False),
-        "use_line_directives": OptInf(nodes.BoolLiteral, True),
-        "weak_ptr":            OptInf(nodes.StringLiteral, "$@*"),
+        "allocator":           OptInf(nodes.StringLiteral, nodes.StringLiteral(value="new $@")),
+        "class_extra":         OptInf(nodes.ListLiteral,   nodes.ListLiteral()),
+        "cpp_indent":          OptInf(nodes.StringLiteral, nodes.StringLiteral(value="")),
+        "deleter":             OptInf(nodes.StringLiteral, nodes.StringLiteral(value="delete $$")),
+        "epilog":              OptInf(nodes.StringLiteral, nodes.StringLiteral(value="")),
+        "header_only":         OptInf(nodes.BoolLiteral,   nodes.BoolLiteral(value=True)),
+        "includes":            OptInf(nodes.ListLiteral,   nodes.ListLiteral()),
+        "indent":              OptInf(nodes.StringLiteral, nodes.StringLiteral(value="    ")),
+        "list_type":           OptInf(nodes.StringLiteral, nodes.StringLiteral(value="std::vector<$@>")),
+        "namespace":           OptInf(nodes.StringLiteral, nodes.StringLiteral(value="")),
+        "prolog":              OptInf(nodes.StringLiteral, nodes.StringLiteral(value="")),
+        "strong_ptr":          OptInf(nodes.StringLiteral, nodes.StringLiteral(value="$@*")),
+        "use_accessors":       OptInf(nodes.BoolLiteral,   nodes.BoolLiteral(value=False)),
+        "use_line_directives": OptInf(nodes.BoolLiteral,   nodes.BoolLiteral(value=True)),
+        "weak_ptr":            OptInf(nodes.StringLiteral, nodes.StringLiteral(value="$@*")),
     }
 
     # Options allowed in extern X { ... } blocks
     external_options = {
-        "construct": OptInf(nodes.StringLiteral, ""),
-        "destruct":  OptInf(nodes.StringLiteral, ""),
-        "type":      OptInf(nodes.StringLiteral, "", True),
+        "construct": OptInf(nodes.StringLiteral, nodes.StringLiteral(value="")),
+        "destruct":  OptInf(nodes.StringLiteral, nodes.StringLiteral(value="")),
+        "type":      OptInf(nodes.StringLiteral, nodes.StringLiteral(value=""), True),
     }
 
     def __init__(self, spec):
@@ -78,14 +78,14 @@ class CPlusPlusTarget(target.CodegenTarget):
     def line_dir(self, location):
         if location:
             lds = self.get_opt("use_line_directives")
-            if lds and lds.value:
+            if isinstance(lds, nodes.BoolLiteral) and lds.value:
                 return ccode.CppLine(first='%d' % location.line,
                                      second='"%s"' % location.file)
         return ccode.Stmt(code='')
 
     def reset_line_dir(self):
         lds = self.get_opt("use_line_directives")
-        if lds and lds.value:
+        if isinstance(lds, nodes.BoolLiteral) and lds.value:
             return ccode.CppLineReset()
         return ccode.Stmt(code='')
 

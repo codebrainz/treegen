@@ -48,8 +48,8 @@ class NullLiteral(Literal):
         super().__init__(value)
 
 class ListLiteral(Literal):
-    def __init__(self, list):
-        super().__init__(list)
+    def __init__(self, list=None):
+        super().__init__(list if list is not None else [])
 
 class Call(BaseNode):
     def __init__(self, name):
