@@ -1,10 +1,14 @@
 import io
 import textwrap
+from . import nodes
 
-class CCodeIO(io.StringIO):
+class CCodeIO(object):
 
-    def __init__(self, indent='  ', cpp_indent=' '):
+    def __init__(self, fn, indent='  ', cpp_indent=' '):
         super().__init__()
+        self.out = io.StringIO()
+        self.fn = fn
+        self.line = 1
         self.indent_chr = indent
         self.indent_level = 0
         self.indent_string = ''
@@ -39,6 +43,19 @@ class CCodeIO(io.StringIO):
     def cpp_indentation(self):
         return self.cpp_indent_string
 
+    @property
+    def reset_location(self):
+        return nodes.Location(self.fn, self.line, 0)
+
+    @property
+    def contents(self):
+        return self.out.getvalue()
+
+    def write(self, text):
+        ' Write text as-is to the output. Keeps track of line count. '
+        self.line += text.count('\n')
+        self.out.write(text)
+
     def write_line(self, line_text):
         ' Write line_text with leading indentation and a trailing newline. '
         self.write_indented(line_text)
@@ -46,7 +63,7 @@ class CCodeIO(io.StringIO):
 
     def cpp_write_line(self, line_text):
         self.cpp_write_indented(line_text)
-        self.cpp_write('\n')
+        self.write('\n')
 
     def write_indented(self, text):
         ' Write text with leading indentation. '

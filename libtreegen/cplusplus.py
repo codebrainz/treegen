@@ -83,6 +83,12 @@ class CPlusPlusTarget(target.CodegenTarget):
                                      second='"%s"' % location.file)
         return ccode.Stmt(code='')
 
+    def reset_line_dir(self):
+        lds = self.get_opt("use_line_directives")
+        if lds and lds.value:
+            return ccode.CppLineReset()
+        return ccode.Stmt(code='')
+
     def codegen(self, out_filename, indent='  ', cpp_indent=' '):
         """
         First builds a CCodeNode tree from the spec file and then calls the
@@ -108,12 +114,14 @@ class CPlusPlusTarget(target.CodegenTarget):
                     inc_name = '"' + inc_name + '"'
                 self.tu.includes.append(self.line_dir(includes.location))
                 self.tu.includes.append(ccode.CppInclude(first=inc_name))
+                self.tu.includes.append(self.reset_line_dir())
 
         ns_name = self.get_opt("namespace")
         if ns_name:
             self.top.stmts.append(self.line_dir(ns_name.location))
             ns_name = ns_name.value
             ns = ccode.Namespace(name=ns_name)
+            ns.stmts.append(self.reset_line_dir())
             self.top.stmts.append(ns)
             self.pstack.append(ns)
             self.top.stmts.append(ccode.BlankLine())
@@ -130,6 +138,7 @@ class CPlusPlusTarget(target.CodegenTarget):
         for visitor in self.spec.visitors:
             self.top.stmts.append(self.line_dir(visitor.location))
             cls = ccode.ClassDecl(name=visitor.name)
+            cls.fields.append(self.reset_line_dir())
             self.top.stmts.append(cls)
             self.pstack.append(cls)
             for node in self.spec.nodes:
@@ -152,6 +161,7 @@ class CPlusPlusTarget(target.CodegenTarget):
             cls = ccode.ClassDecl(name=node.name, bases=bases)
             self.top.stmts.append(cls)
             self.pstack.append(cls)
+            self.top.fields.append(self.reset_line_dir())
             self.add_fields(node)
             self.add_constructors(node)
             self.add_destructor(node)
@@ -163,9 +173,9 @@ class CPlusPlusTarget(target.CodegenTarget):
         self.pstack.pop()
 
         # codegen everything to CCodeIO object
-        out = ccodeio.CCodeIO(indent, cpp_indent)
+        out = ccodeio.CCodeIO(out_filename, indent, cpp_indent)
         self.tu.codegen(out)
-        return out.getvalue()
+        return out.contents
 
     def add_class_extra(self):
         extra = self.get_opt("class_extra", None)
@@ -175,6 +185,7 @@ class CPlusPlusTarget(target.CodegenTarget):
                 if not isinstance(ext, nodes.StringLiteral):
                     raise ValueError("expected a list of string literal for 'class_extra' option")
                 self.top.extra_stmts.append(ccode.Stmt(code=ext.value))
+            self.top.extra_stmts.append(self.reset_line_dir())
 
     def add_getter(self, field):
         meth = ccode.Method(type=self.datatype_from_field(field),
@@ -242,6 +253,7 @@ class CPlusPlusTarget(target.CodegenTarget):
             if dt is None:
                 raise ValueError("unknown field type '%s'" % field.type.type.name)
             self.top.fields.append(ccode.Field(type=dt, name=field.name))
+            self.top.fields.append(self.reset_line_dir())
 
     def find_field(self, node, name):
         for field in node.fields:
@@ -300,6 +312,7 @@ class CPlusPlusTarget(target.CodegenTarget):
             self.top.constructors.append(self.line_dir(ctr.location))
             ctor = ccode.Constructor(name=node.name)
             self.top.constructors.append(ctor)
+            self.top.constructors.append(self.reset_line_dir())
             self.pstack.append(ctor)
             self.add_construct_params(ctr, node)
             self.add_initializers(ctr, node)

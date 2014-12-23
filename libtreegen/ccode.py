@@ -108,6 +108,13 @@ class CppLine(CppMacro):
     def codegen(self, out):
         super().codegen(out, name='line')
 
+class CppLineReset(CppMacro):
+    def codegen(self, out):
+        loc = out.reset_location
+        CppLine(first='%d' % out.reset_location.line,
+                second='"%s"' % out.reset_location.file
+        ).codegen(out)
+
 class TranslationUnit(CCodeNode):
     _fields = [
         ("filename", ""),

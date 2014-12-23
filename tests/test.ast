@@ -21,10 +21,10 @@ target CPlusPlus {
   epilog: "data/header.txt";
   prolog: "data/footer.txt";
 
-  includes: [ "<vector>" ];
+  includes: [ "<vector>", "<iostream>" ];
 
   // stuffed at end of class decl
-  class_extra: [ "void codegen(CCodeIO& cio);" ];
+  class_extra: [ "void codegen(std::ostream& cio);" ];
 
   extern D {
     type:      "D*";

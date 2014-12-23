@@ -26,6 +26,8 @@ def _write_if_different(fn, out_file, content):
     if existing_content != content:
         if hasattr(out_file, "seek"):
             out_file.seek(0)
+        if hasattr(out_file, "truncate"):
+            out_file.truncate(0)
         out_file.write(content)
 
 def codegen(spec, target, out_file=None, out_filename=None, indent='  '):
