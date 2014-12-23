@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 
 import os
-import sys
 import ply.lex as lex
 import ply.yacc as yacc
 from .nodes import *
+from . import report
 
 #
 # Lexical analyzer
@@ -132,18 +132,17 @@ def t_newline(t):
 
 t_ignore = ' \t'
 
-def find_column(input, token):
-    last_cr = input.rfind('\n', 0, token.lexpos)
+def find_column(input, token, index=1):
+    pos = token.lexpos if not callable(token.lexpos) else token.lexpos(index)
+    last_cr = input.rfind('\n', 0, pos)
     if last_cr < 0:
         last_cr = 0
-    column = (token.lexpos - last_cr) + 1
+    column = (pos - last_cr) + 1
     return column
 
 def t_error(t):
-    sys.stderr.write("error: %d:%d: illegal character '%s'" % (
-        t.lexer.lineno, find_column(t.lexer.lexdata, t),
-        t.value[0]))
-    sys.exit(1)
+    location = Location(t.lexer.filename, t.lexer.lineno, find_column(t.lexer.lexdata, t))
+    report.error("illegal character '%s'" % t.value[0], location)
 
 #
 # Syntax analyzer
@@ -160,12 +159,14 @@ def pop_parent(p):
     top = parents[-1]
     parents.pop()
 
-def add_node(p, node):
+def add_node(p, node, index=1):
     parents = getattr(p.parser, "parents")
     top = parents[-1]
     node.parent = top
+    node.location = Location(p.lexer.filename,
+                             p.lexer.lineno,
+                             find_column(p.lexer.lexdata, p, index))
     top.children.append(node)
-    #print("%s > %s" % (node.__class__.__name__, top.__class__.__name__))
     return node
 
 def p_expr_list_first(p):
@@ -184,13 +185,13 @@ def p_expr_list_rest(p):
 def p_list_literal(p):
     ''' list_literal : LBRACKET expr_list RBRACKET
     '''
-    p[0] = ListLiteral(p[2])
+    p[0] = add_node(p, ListLiteral(p[2]), 2)
     return p
 
 def p_list_literal_empty(p):
     ''' list_literal : LBRACKET RBRACKET
     '''
-    p[0] = ListLiteral([])
+    p[0] = add_node(p, ListLiteral([]))
     return p
 
 def p_literal_bool(p):
@@ -346,8 +347,9 @@ def p_target(p):
             p[0].options.append(item)
         elif isinstance(item, ExternTypeDef):
             p[0].externs.append(item)
-        else:
-            raise RuntimeError('unexpected item %s' % item)
+        else: # should be/is disallowed by parsing rules
+            report.error("unexpected %s in codegen target, " % item.__class__.__name__ +
+                         "only options and extern types are allowed", item.location)
         p[0].children.append(item)
         item.parent = p[0]
     pop_parent(p)
@@ -379,7 +381,7 @@ def p_root(p):
     '''
     p[0] = add_node(p, RootSpec(None))
     push_parent(p, p[0])
-    p[0].type = add_node(p, UnresolvedType(p[2]))
+    p[0].type = add_node(p, UnresolvedType(p[2]), 2)
     pop_parent(p)
     return p
 
@@ -436,16 +438,16 @@ def p_field_type(p):
     '''
     is_weak = True if "weak" in p[1] else False
     is_list = True if "list" in p[1] else False
-    p[0] = FieldType(p[2], is_weak=is_weak)
+    p[0] = add_node(p, FieldType(p[2], is_weak=is_weak))
     push_parent(p, p[0])
     if is_list:
         let = add_node(p, ListElementType(None, is_weak=is_weak))
         push_parent(p, let)
-        let.type = add_node(p, p[2])
+        let.type = add_node(p, p[2], 2)
         pop_parent(p)
         p[0].type = let
     else:
-        p[0].type = add_node(p, p[2])
+        p[0].type = add_node(p, p[2], 2)
     pop_parent(p)
     return p
 
@@ -520,7 +522,7 @@ def p_node_specifier_list_rest(p):
 def p_node_base(p):
     ''' node_base : COLON IDENT
     '''
-    p[0] = add_node(p, UnresolvedType(p[2], is_weak=True))
+    p[0] = add_node(p, UnresolvedType(p[2], is_weak=True), 2)
     return p
 
 def p_node_item_fields(p):
@@ -591,8 +593,9 @@ def p_node(p):
             p[0].ctrs.append(item)
         elif all(isinstance(e, Field) for e in item):
             p[0].fields.extend(item)
-        else:
-            raise RuntimeError("unexpected node type '%s'" % item.__class__.__name__)
+        else: # should be/is disallowed by parsing rules
+            report.error("unexpected item in %s in node " % item.__class__.__name__ +
+                         "definition, only Fields and Constructors are allowed")
     p[0].base = None
     pop_parent(p)
     return p
@@ -608,8 +611,9 @@ def p_node_with_base(p):
             p[0].ctrs.append(item)
         elif all(isinstance(e, Field) for e in item):
             p[0].fields.extend(item)
-        else:
-            raise RuntimeError("unexpected node type '%s'" % item.__class__.__name__)
+        else: # should be/is disallowed by parsing rules
+            report.error("unexpected item in %s in node " % item.__class__.__name__ +
+                         "definition, only Fields and Constructors are allowed")
     p[0].base = p[2]
     pop_parent(p)
     return p
@@ -651,6 +655,10 @@ def p_spec_file_item_list_rest(p):
     p[0] = p[1]
     return p
 
+#
+# FIXME: move this type resolution stuff into a separate module/NodeVisitor class
+#
+
 def find_extern_types(spec, types):
     for target in spec.targets:
         for extern in target.externs:
@@ -664,7 +672,8 @@ def find_node_types(spec, types):
         if node.name not in types:
             types[node.name] = node
         else:
-            sys.stderr.write("error: duplicate node type %s\n" % node.name)
+            report.error("duplicate node type %s" % node.name, fatal=False, location=node.location)
+            report.note("previous definition was here", fatal=True, location=types[node.name].location)
 
 def resolve_node_fields(node, types):
     for field in node.fields:
@@ -673,16 +682,14 @@ def resolve_node_fields(node, types):
             if tp.name in types:
                 field.type.type = types[field.type.type.name]
             else:
-                sys.stderr.write("error: unresolved field type '%s'\n" % tp.name)
-                sys.exit(1)
+                report.error("unresolved field type %s" % tp.name, field.location)
 
 def resolve_node_base(node, types):
     if isinstance(node.base, UnresolvedType):
         if node.base.name in types:
             node.base = types[node.base.name]
         else:
-            sys.stderr.write("error: unresolved base node type '%s'\n" % node.base.name)
-            sys.exit(1)
+            report.error("unresolved base node type %s" % node.base.name, node.base.location)
 
 def resolve_node_types(spec, types):
     for node in spec.nodes:
@@ -694,8 +701,7 @@ def resolve_root_spec(spec, types):
         if spec.root.type.name in types:
             spec.root.type = types[spec.root.type.name]
         else:
-            sys.stderr.write("error: unresolved root node type '%s'\n" % spec.root.type.name)
-            sys.exit(1)
+            report.error("unresolved root node type %s" % spec.root.type.name, spec.root.location)
 
 def resolve_list_types(spec, types):
     for node in spec.nodes:
@@ -705,8 +711,7 @@ def resolve_list_types(spec, types):
                     if field.type.type.type.name in types:
                         field.type.type.type = types[field.type.type.type.name]
                 else:
-                    sys.stderr.write("error: unresolved list node type '%s'\n" % field.type.type.name)
-                    sys.exit(1)
+                    report.error("unresolved list node type %s" % field.type.type.name, field.type.location)
 
 def resolve_types(spec):
     types = {}
@@ -716,24 +721,6 @@ def resolve_types(spec):
     resolve_root_spec(spec, types)
     resolve_list_types(spec, types)
     return types
-
-def check_include(fn_string, search_paths):
-    if fn_string.startswith('"') and fn_string.endswith('"'):
-        fn_string = fn_string[1:-1]
-    if os.path.isabs(fn_string):
-        return (fn_string, open(fn_string, 'r'))
-    else:
-        fn = os.path.abspath(fn_string)
-        try:
-            return (fn, open(fn, 'r'))
-        except IOError:
-            for dir in search_paths:
-                fn = os.path.abspath(os.path.join(dir, fn_string))
-                try:
-                    return (fn, open(fn, 'r'))
-                except IOError:
-                    pass
-        return (None, None)
 
 def p_spec_file(p):
     ''' spec_file : spec_file_item_list
@@ -752,9 +739,8 @@ def p_spec_file(p):
     return p
 
 def p_error(t):
-    sys.stderr.write('error %d:%d bad syntax\n' % (
-        t.lexer.lineno, find_column(t.lexer.lexdata, t)))
-    sys.exit(1)
+    location = Location(t.lexer.filename, t.lexer.lineno, find_column(t.lexer.lexdata, t))
+    report.error('invalid syntax', location)
 
 def parse(file, filename, debug=True):
     lexer = lex.lex(debug=True) if debug \
@@ -764,6 +750,7 @@ def parse(file, filename, debug=True):
     else:
         with open(filename, 'r') as f:
             lexer.input(f.read())
+    setattr(lexer, "filename", filename)
     parser = yacc.yacc(debug=True) if debug \
                 else yacc.yacc(debug=False, errorlog=yacc.NullLogger())
     parents = []

@@ -24,9 +24,11 @@ class CPlusPlusTarget(object):
     opt_info = {
         "allocator": (nodes.StringLiteral, "new $@"),
         "class_extra": (nodes.ListLiteral, []),
+        "cpp_indent": (nodes.StringLiteral, " "),
         "deleter": (nodes.StringLiteral, "delete $$"),
         "epilog": (nodes.StringLiteral, ""),
         "header_only": (nodes.BoolLiteral, True),
+        "indent": (nodes.StringLiteral, "    "),
         "list_type": (nodes.StringLiteral, "std::vector<$@>"),
         "namespace": (nodes.StringLiteral, ""),
         "prolog": (nodes.StringLiteral, ""),
