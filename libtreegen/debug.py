@@ -1,6 +1,7 @@
 import sys
 from .nodes import *
 
+# FIXME: use codeio.CodeIO to handle indentation and stuff
 class DebugTree(NodeVisitor):
 
     def __init__(self, out=sys.stdout, indent='  '):
@@ -27,12 +28,32 @@ class DebugTree(NodeVisitor):
         self.out.write(self.indentation + txt)
 
     def generic_visit(self, node):
+        # if this runs, there's a problem :(
         self.write_line('<Unhandled>%s</Unhandled>' % node.__class__.__name__)
-        #sys.stderr.write("error: unknown node type '%s'\n" % node.__class__.__name__)
-        #sys.exit(1)
 
-    def visit_Literal(self, node):
+    def visit_BoolLiteral(self, node):
         self.write('%s' % node.value)
+
+    def visit_IntLiteral(self, node):
+        self.write('%s' % node.value)
+
+    def visit_FloatLiteral(self, node):
+        self.write('%s' % node.value)
+
+    def visit_CharLiteral(self, node):
+        self.write('%s' % node.value)
+
+    def visit_StringLiteral(self, node):
+        self.write('%s' % node.value)
+
+    def visit_NullLiteral(self, node):
+        self.write('%s' % node.value)
+
+    def visit_ListLiteral(self, node):
+        self.write('<List>')
+        for item in node.value:
+            item.accept(self)
+        self.write('</List>')
 
     def visit_Call(self, node):
         self.write('<Construct/>')
@@ -144,9 +165,8 @@ class DebugTree(NodeVisitor):
     def visit_SpecFile(self, node):
         self.write_line('<Spec src="%s">' % node.filename)
         self.indent()
-        node.root.accept(self)
-        node.prolog.accept(self)
-        node.epilog.accept(self)
+        if node.root:
+            node.root.accept(self)
         for target in node.targets:
             target.accept(self)
         for visitor in node.visitors:
