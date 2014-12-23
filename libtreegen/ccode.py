@@ -104,6 +104,10 @@ class CppEndif(CppMacro):
     def codegen(self, out):
         super().codegen(out, name='endif', unindents=True)
 
+class CppLine(CppMacro):
+    def codegen(self, out):
+        super().codegen(out, name='line')
+
 class TranslationUnit(CCodeNode):
     _fields = [
         ("filename", ""),
@@ -351,9 +355,10 @@ class Stmt(CCodeNode):
     def codegen(self, out):
         if self.code:
             out.write_indented(self.code)
-            if not self.code.endswith(';'):
+            if not self.code.endswith(';') and len(self.code) > 0:
                 out.write(';')
-            out.write('\n')
+            if len(self.code) > 0:
+                out.write('\n')
 
 class DataType(CCodeNode):
     _fields = [

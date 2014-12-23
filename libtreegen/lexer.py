@@ -1,3 +1,6 @@
+from . import nodes
+from . import report
+
 reserved = {
     "abstract": "ABSTRACT",
     "extern":   "EXTERN",
@@ -58,7 +61,7 @@ t_SEMICOLON = '\;'
 
 def t_COMMENT(t):
     r'//[^\n]*\n|/\*(.+?)\*/'
-    pass #ignored
+    t.lexer.lineno += t.value.count('\n')
 
 def t_IDENT(t):
     r'[a-zA-Z_][a-zA-Z_0-9]*'
@@ -129,5 +132,5 @@ def find_column(input, token, index=1):
     return column
 
 def t_error(t):
-    location = Location(t.lexer.filename, t.lexer.lineno, find_column(t.lexer.lexdata, t))
+    location = nodes.Location(t.lexer.filename, t.lexer.lineno, find_column(t.lexer.lexdata, t))
     report.error("illegal character '%s'" % t.value[0], location)

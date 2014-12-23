@@ -42,13 +42,13 @@ def set_error_stream(stream=sys.stderr, use_colors=True, show_context_text=True)
 def _get_context(filename, line, column):
     line_text = ''
     with open(filename, 'r') as file:
-        for num, text in enumerate(file):
-            if num == line + 2: # WTF?! why 2? should be 1
+        for num, text in enumerate(file, 1):
+            if num == line:
                 line_text = text.rstrip()
                 break
     if line_text:
         line_text = '\t' + line_text + '\n\t'
-        for i in range(column-2): # WTF!? why 2? should be 1
+        for i in range(column-2): # WTF!? why 2? should be 1 at most
             line_text += ' '
         line_text += GREEN + BOLD + '^' + RESET + '\n'
     return line_text

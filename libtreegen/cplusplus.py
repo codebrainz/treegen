@@ -75,6 +75,14 @@ class CPlusPlusTarget(target.CodegenTarget):
     def top(self):
         return self.pstack[-1]
 
+    def line_dir(self, location):
+        if location:
+            lds = self.get_opt("use_line_directives")
+            if lds and lds.value:
+                return ccode.CppLine(first='%d' % location.line,
+                                     second='"%s"' % location.file)
+        return ccode.Stmt(code='')
+
     def codegen(self, out_filename, indent='  ', cpp_indent=' '):
         """
         First builds a CCodeNode tree from the spec file and then calls the
@@ -93,16 +101,18 @@ class CPlusPlusTarget(target.CodegenTarget):
                 if not isinstance(inc, nodes.StringLiteral):
                     report.error("invalid data type '%s' in " % inc.__class__.__name__ +
                                  "'includes' option for codegen target '%s'" % self.name)
-                inc = inc.value
+                inc_name = inc.value
                 # Add double quotes if not <> include and has no enclosing quotes
-                if (not inc.startswith('<') and not inc.endswith('>')) and \
-                   (not inc.startswith('"') and not inc.endswith('"')):
-                    inc = '"' + inc + '"'
-                self.tu.includes.append(ccode.CppInclude(first=inc))
+                if (not inc_name.startswith('<') and not inc_name.endswith('>')) and \
+                   (not inc_name.startswith('"') and not inc_name.endswith('"')):
+                    inc_name = '"' + inc_name + '"'
+                self.tu.includes.append(self.line_dir(includes.location))
+                self.tu.includes.append(ccode.CppInclude(first=inc_name))
 
         ns_name = self.get_opt("namespace")
         if ns_name:
-            ns_name = ns_name.value.strip('"')
+            self.top.stmts.append(self.line_dir(ns_name.location))
+            ns_name = ns_name.value
             ns = ccode.Namespace(name=ns_name)
             self.top.stmts.append(ns)
             self.pstack.append(ns)
@@ -116,7 +126,9 @@ class CPlusPlusTarget(target.CodegenTarget):
         self.top.stmts.append(ccode.BlankLine())
 
         # create a class for each visitor
+        # TODO: use the visitor X { ... } block options to control output
         for visitor in self.spec.visitors:
+            self.top.stmts.append(self.line_dir(visitor.location))
             cls = ccode.ClassDecl(name=visitor.name)
             self.top.stmts.append(cls)
             self.pstack.append(cls)
@@ -135,6 +147,7 @@ class CPlusPlusTarget(target.CodegenTarget):
 
         # create all the node classes
         for node in self.spec.nodes:
+            self.top.stmts.append(self.line_dir(node.location))
             bases = [node.base] if node.base else []
             cls = ccode.ClassDecl(name=node.name, bases=bases)
             self.top.stmts.append(cls)
@@ -157,6 +170,7 @@ class CPlusPlusTarget(target.CodegenTarget):
     def add_class_extra(self):
         extra = self.get_opt("class_extra", None)
         if extra:
+            self.top.extra_stmts.append(self.line_dir(extra.location))
             for ext in extra.value:
                 if not isinstance(ext, nodes.StringLiteral):
                     raise ValueError("expected a list of string literal for 'class_extra' option")
@@ -223,6 +237,7 @@ class CPlusPlusTarget(target.CodegenTarget):
 
     def add_fields(self, node):
         for field in node.fields:
+            self.top.fields.append(self.line_dir(field.location))
             dt = self.datatype_from_field(field)
             if dt is None:
                 raise ValueError("unknown field type '%s'" % field.type.type.name)
@@ -282,6 +297,7 @@ class CPlusPlusTarget(target.CodegenTarget):
         if len(node.ctrs) == 0:
             return
         for ctr in node.ctrs:
+            self.top.constructors.append(self.line_dir(ctr.location))
             ctor = ccode.Constructor(name=node.name)
             self.top.constructors.append(ctor)
             self.pstack.append(ctor)
